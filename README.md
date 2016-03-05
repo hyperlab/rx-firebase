@@ -10,13 +10,13 @@ Extends Firebase websocket client with RxJS methods.
 
 ## Install
 
-```
+```shell
 npm install rx-firebase
 ```
 
 ## Usage
 
-```
+```javascript
 const rxFirebase = require('rx-firebase');
 const firebase = rxFirebase.factory('singpath');
 const someUseId = 'google:12345';
