@@ -1,159 +1,266 @@
+/* eslint babel/object-shorthand: off */
 'use strict';
 
-const expect = require('expect.js');
-const rxFirebase = require('../');
+const chai = require('chai');
 const sinon = require('sinon');
+const sinonChai = require('sinon-chai');
+const rx = require('rxjs');
 
-describe('factory', function() {
+const rxFirebase = require('../');
 
-  it('should bind to a firebase id', function() {
-    const firebase = rxFirebase.factory('singpath');
-    const ref = firebase();
+chai.use(sinonChai);
 
-    expect(ref.toString()).to.be('https://singpath.firebaseio.com/');
+require('./test-sync-list');
+
+const expect = chai.expect;
+
+describe('extend', function() {
+  let firebase;
+
+  beforeEach(function() {
+    firebase = {
+      auth: {
+        Auth: function() {}
+      },
+      database: {
+        Query: function() {}
+      }
+    };
+
+    firebase.auth.Auth.prototype = {
+      onAuthStateChanged: sinon.stub()
+    };
+    firebase.database.Query.prototype = {
+      on: sinon.stub(),
+      off: sinon.spy()
+    };
+
+    rxFirebase.extend(firebase, rx.Observable);
   });
 
-  it('should bind to a firebase url', function() {
-    const firebase = rxFirebase.factory('https://singpath.firebaseio.com');
-    const ref = firebase();
-
-    expect(ref.toString()).to.be('https://singpath.firebaseio.com/');
+  it('should extend firebase auth', function() {
+    expect(firebase.auth.Auth.prototype.observeAuthState).to.be.a('function');
   });
 
-  it('should throw if asked to bind to an invalid id', function() {
-    expect(() => rxFirebase.factory('foo.bar')).to.throwError();
-  });
+  describe('Auth.observeAuthState', function() {
+    let unsub, observable;
 
-  it('should throw if asked to bind to an invalid url', function() {
-    expect(() => rxFirebase.factory('foo.bar.com')).to.throwError();
-  });
+    beforeEach(function() {
+      unsub = sinon.spy();
+      firebase.auth.Auth.prototype.onAuthStateChanged.returns(unsub);
 
-  it('should reference a path (as string)', function() {
-    const firebase = rxFirebase.factory('https://singpath.firebaseio.com');
-    const paths = 'foo/bar';
-    const ref = firebase(paths);
-
-    expect(ref.toString()).to.be('https://singpath.firebaseio.com/foo/bar');
-  });
-
-  it('should reference a path (as array)', function() {
-    const firebase = rxFirebase.factory('https://singpath.firebaseio.com');
-    const paths = ['foo', 'bar'];
-    const ref = firebase(paths);
-
-    expect(ref.toString()).to.be('https://singpath.firebaseio.com/foo/bar');
-  });
-
-  describe('RxFirebase', function() {
-
-    it('should be patched', function() {
-      expect(rxFirebase.RxFirebase.observe).to.be.ok();
-      expect(rxFirebase.RxFirebase.prototype.observe).to.be.ok();
-      expect(rxFirebase.RxFirebase.prototype.observeAuth).to.be.ok();
+      observable = new firebase.auth.Auth().observeAuthState();
     });
 
-    describe('observe', function() {
-      let ref;
-
-      beforeEach(function() {
-        const firebase = rxFirebase.factory('singpath');
-
-        ref = firebase();
-
-        sinon.stub(ref, 'on');
-        sinon.stub(ref, 'off');
-      });
-
-      it('should return an Observable', function() {
-        const obs = ref.observe('value');
-        const sub = obs.subscribe(() => undefined);
-
-        expect(sub.dispose).to.be.a(Function);
-        sub.dispose();
-      });
-
-      it('should listen for data changes at a firebase location', function() {
-        const snapshot = {};
-
-        ref.on.onFirstCall().yields(snapshot);
-
-        return rxFirebase.RxFirebase.observe(ref, 'value').take(1).toPromise().then(value => {
-          sinon.assert.calledOnce(ref.on);
-          sinon.assert.calledWithExactly(ref.on, 'value', sinon.match.func, sinon.match.func);
-          expect(value).to.be(snapshot);
-        });
-      });
-
-      it('should return a stream emitting an error on cancel event', function() {
-        const err = new Error();
-
-        ref.on.onFirstCall().callsArgWith(2, err);
-
-        return rxFirebase.RxFirebase.observe(ref, 'value').take(1).toPromise().then(
-          () => Promise.reject(new Error('unexpected')),
-          e => expect(e).to.be(err)
-        );
-      });
-
-      it('should detach the event handler when unsubscribing to the observable', function() {
-        ref.on.onFirstCall().yields({});
-
-        return rxFirebase.RxFirebase.observe(ref, 'value').take(1).toPromise().then(function() {
-          const handler = ref.on.getCall(0).args[1];
-
-          sinon.assert.calledOnce(ref.off);
-          sinon.assert.calledWithExactly(ref.off, 'value', handler);
-        });
-      });
-
+    it('should return an observable', function() {
+      expect(observable.subscribe).to.be.a('function');
     });
 
-    describe('observeAuth', function() {
-      let ref;
+    it('should subscribe to onAuthStateChanged on subscription', function() {
+      const sub = observable.subscribe();
+      const authObserver = firebase.auth.Auth.prototype.onAuthStateChanged.lastCall.args[0];
 
-      beforeEach(function() {
-        const firebase = rxFirebase.factory('singpath');
+      expect(firebase.auth.Auth.prototype.onAuthStateChanged).to.have.been.calledOnce;
+      expect(authObserver.next).to.be.a('function');
+      expect(authObserver.error).to.be.a('function');
+      expect(authObserver.complete).to.be.a('function');
+      expect(sub.unsubscribe).to.be.a('function');
+    });
 
-        ref = firebase();
+    it('should emit auth changes', function() {
+      const user = {uid: 'bob'};
+      const promise = observable.take(3).toArray().toPromise();
+      const authObserver = firebase.auth.Auth.prototype.onAuthStateChanged.lastCall.args[0];
 
-        sinon.stub(ref, 'onAuth');
-        sinon.stub(ref, 'offAuth');
-        sinon.stub(ref, 'getAuth');
-      });
+      authObserver.next(null);
+      authObserver.next(user);
+      authObserver.next(null);
 
-      it('should return an Observable', function() {
-        const obs = ref.observeAuth();
-        const sub = obs.subscribe(() => undefined);
+      return promise.then(
+        result => expect(result).to.eql([null, user, null])
+      );
+    });
 
-        expect(sub.dispose).to.be.a(Function);
-        sub.dispose();
-      });
-
-      it('should listen for auth changes', function() {
-        const auth = {};
-
-        ref.onAuth.onFirstCall().yields(auth);
-
-        return ref.observeAuth().take(2).toPromise().then(value => {
-          sinon.assert.calledOnce(ref.onAuth);
-          sinon.assert.calledWithExactly(ref.onAuth, sinon.match.func);
-          expect(value).to.be(auth);
-        });
-      });
-
-      it('should stop listen for auth changes on dispose', function() {
-        ref.onAuth.onFirstCall().yields({});
-
-        return ref.observeAuth().take(2).toPromise().then(function() {
-          const handler = ref.onAuth.getCall(0).args[0];
-
-          sinon.assert.calledOnce(ref.offAuth);
-          sinon.assert.calledWithExactly(ref.offAuth, handler);
-        });
-      });
-
+    it('should clean up on unsubscribe', function() {
+      observable.subscribe().unsubscribe();
+      expect(unsub).to.have.been.calledOnce;
     });
 
   });
 
+  describe('Query.observe', function() {
+    let query, observable;
+
+    beforeEach(function() {
+      query = new firebase.database.Query();
+      observable = query.observe('child_added');
+    });
+
+    it('should return an observable', function() {
+      expect(observable.subscribe).to.be.a('function');
+    });
+
+    it('should subscribe to change and error event', function() {
+      observable.subscribe();
+
+      expect(query.on).to.have.been.calledOnce;
+      expect(query.on).to.have.been.calledWithExactly('child_added', sinon.match.func, sinon.match.func);
+    });
+
+    it('should emit snapshot value', function() {
+      const promise = observable.take(2).toArray().toPromise();
+      const next = query.on.lastCall.args[1];
+      const snapshot1 = makeSnapShot('someKey', {some: 'value'});
+      const snapshot2 = makeSnapShot('someOtherKey', 'literalValue');
+
+      next(snapshot1);
+      next(snapshot2, 'someKey');
+
+      return promise.then(values => {
+        expect(values).to.have.length(2);
+
+        expect(values[0].$key).to.equal('someKey');
+        expect(values[0].$ref).to.equal(snapshot1.ref);
+        expect(values[0].$prev).to.equal(undefined);
+        expect(values[0].$eventType).to.equal('child_added');
+        expect(values[0].some).to.equal('value');
+
+        expect(values[1].$key).to.equal('someOtherKey');
+        expect(values[1].$ref).to.equal(snapshot2.ref);
+        expect(values[1].$prev).to.equal('someKey');
+        expect(values[1].$eventType).to.equal('child_added');
+        expect(values[1].$value).to.equal('literalValue');
+      });
+    });
+
+    it('should emit snapshot', function() {
+      const promise = query.observe('child_added', false).take(2).toArray().toPromise();
+      const next = query.on.lastCall.args[1];
+      const snapshot1 = makeSnapShot('someKey', {some: 'value'});
+      const snapshot2 = makeSnapShot('someOtherKey', 'literalValue');
+
+      next(snapshot1);
+      next(snapshot2, 'someKey');
+
+      return promise.then(values => {
+        expect(values).to.have.length(2);
+
+        expect(values[0].$key).to.equal('someKey');
+        expect(values[0].$ref).to.equal(snapshot1.ref);
+        expect(values[0].$prev).to.equal(undefined);
+        expect(values[0].$eventType).to.equal('child_added');
+        expect(values[0].val()).to.eql({some: 'value'});
+
+        expect(values[1].$key).to.equal('someOtherKey');
+        expect(values[1].$ref).to.equal(snapshot2.ref);
+        expect(values[1].$prev).to.equal('someKey');
+        expect(values[1].$eventType).to.equal('child_added');
+        expect(values[1].val()).to.equal('literalValue');
+      });
+    });
+
+    it('should emit error', function() {
+      const promise = observable.take(1).toPromise();
+      const error = query.on.lastCall.args[2];
+      const err = new Error('err');
+
+      error(err);
+
+      return promise.catch(
+        e => expect(e).to.equal(err)
+      );
+    });
+
+    it('should unsubscribe', function() {
+      const sub = observable.subscribe();
+      const next = query.on.lastCall.args[1];
+
+      sub.unsubscribe();
+
+      expect(query.off).to.have.been.calledOnce;
+      expect(query.off).to.have.been.calledWithExactly('child_added', next);
+    });
+
+    it('should unsubscribe on error', function() {
+      const promise = observable.toPromise();
+      const next = query.on.lastCall.args[1];
+      const error = query.on.lastCall.args[2];
+      const err = new Error('err');
+
+      error(err);
+
+      return promise.catch(() => {
+        expect(query.off).to.have.been.calledOnce;
+        expect(query.off).to.have.been.calledWithExactly('child_added', next);
+      });
+    });
+
+  });
+
+  describe('Query.observeChildren', function() {
+    let query, unpack, added, removed, moved, changed, close;
+
+    beforeEach(function() {
+      added = new rx.Subject();
+      removed = new rx.Subject();
+      moved = new rx.Subject();
+      changed = new rx.Subject();
+
+      query = new firebase.database.Query();
+      sinon.stub(query, 'observe');
+
+      query.observe.withArgs('child_added', unpack).returns(added);
+      query.observe.withArgs('child_removed', unpack).returns(removed);
+      query.observe.withArgs('child_moved', unpack).returns(moved);
+      query.observe.withArgs('child_changed', unpack).returns(changed);
+
+      close = () => {
+        added.complete();
+        removed.complete();
+        moved.complete();
+        changed.complete();
+      };
+    });
+
+    it('should observe child_* events', function() {
+      query.observeChildren();
+
+      expect(query.observe).to.have.callCount(4);
+      expect(query.observe).to.have.been.calledWithExactly('child_added', undefined);
+      expect(query.observe).to.have.been.calledWithExactly('child_removed', undefined);
+      expect(query.observe).to.have.been.calledWithExactly('child_moved', undefined);
+      expect(query.observe).to.have.been.calledWithExactly('child_changed', undefined);
+    });
+
+    it('should sync child_* events with an array', function() {
+      const promise = query.observeChildren().toPromise();
+
+      added.next(makeValue('key1', 'baacon'));
+      added.next(makeValue('key2', 'eggs', 'key1'));
+      added.next(makeValue('key3', 'eggs', 'key2'));
+      added.next(makeValue('key4', 'bread', 'key3'));
+      removed.next(makeValue('key3', 'eggs', 'key2'));
+      moved.next(makeValue('key4', 'bread'));
+      changed.next(makeValue('key1', 'bacon', 'key4'));
+
+      close();
+
+      return promise.then(
+        result => expect(result.map(v => v.$value).join(',')).to.eql('bread,bacon,eggs')
+      );
+    });
+
+  });
 });
+
+function makeSnapShot(key, val) {
+  return {
+    key: key,
+    ref: {},
+    val: () => val
+  };
+}
+
+function makeValue($key, $value, $prev) {
+  return {$key, $prev, $value};
+}
