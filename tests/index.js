@@ -124,17 +124,46 @@ describe('extend', function() {
         expect(values[0].$prev).to.equal(undefined);
         expect(values[0].$eventType).to.equal('child_added');
         expect(values[0].some).to.equal('value');
+        expect(JSON.stringify(values[0])).to.equal('{"some":"value"}');
 
         expect(values[1].$key).to.equal('someOtherKey');
         expect(values[1].$ref).to.equal(snapshot2.ref);
         expect(values[1].$prev).to.equal('someKey');
         expect(values[1].$eventType).to.equal('child_added');
         expect(values[1].$value).to.equal('literalValue');
+        expect(`${values[1]}`).to.equal('literalValue');
+        expect(JSON.stringify({val: values[1]})).to.equal('{"val":"literalValue"}');
+      });
+    });
+
+    it('should emit snapshot literal value without toString method', function() {
+      const promise = query.observe('child_added', {toString: false}).take(1).toPromise();
+      const next = query.on.lastCall.args[1];
+      const snapshot2 = makeSnapShot('someOtherKey', 'literalValue');
+
+      next(snapshot2, 'someKey');
+
+      return promise.then(value => {
+        expect(`${value}`).to.equal('[object Object]');
+        expect(JSON.stringify({val: value})).to.equal('{"val":"literalValue"}');
+      });
+    });
+
+    it('should emit snapshot literal value without toJSON method', function() {
+      const promise = query.observe('child_added', {toJSON: false}).take(1).toPromise();
+      const next = query.on.lastCall.args[1];
+      const snapshot2 = makeSnapShot('someOtherKey', 'literalValue');
+
+      next(snapshot2, 'someKey');
+
+      return promise.then(value => {
+        expect(`${value}`).to.equal('literalValue');
+        expect(JSON.stringify({val: value})).to.equal('{"val":{"$value":"literalValue"}}');
       });
     });
 
     it('should emit snapshot', function() {
-      const promise = query.observe('child_added', false).take(2).toArray().toPromise();
+      const promise = query.observe('child_added', {unpack: false}).take(2).toArray().toPromise();
       const next = query.on.lastCall.args[1];
       const snapshot1 = makeSnapShot('someKey', {some: 'value'});
       const snapshot2 = makeSnapShot('someOtherKey', 'literalValue');

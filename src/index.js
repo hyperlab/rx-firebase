@@ -36,27 +36,42 @@ exports.extend = function(firebase, Observable) {
    * Create a (cold) observable emitting changes over a firebase data reference
    * or query.
    *
+   * The values are unpacked by default. Literal values are unpacked into
+   * a "$value" property with toString and toJSON returning the literal the
+   * "$value" property.
+   *
+   * Options:
+   *
+   * - "unpack": set to false to not unpack.
+   * - "toString": set to false to not provide toString to unpacked literal
+   * values.
+   * - "toJSON": set to false to not provide toJSON to unpacked literal values.
+   *
    * @example
    * firebaseApp.database().ref('/some/data').observe('value').subscribe(
    *   value => console.log('some data value: ' + value)
    * )
    *
-   * @param  {string}     eventType "value", "child_added", "child_removed",
-   *                                "child_changed" or "child_moved".
-   * @return {Observable}
+   * @param   {string}     eventType "value", "child_added", "child_removed",
+   *                                 "child_changed" or "child_moved".
+   * @options {Object}     options   unpacking options.
+   * @return  {Observable}
    */
-  firebase.database.Query.prototype.observe = function(eventType, unpack) {
-    if (unpack === undefined) {
-      unpack = true;
-    }
+  firebase.database.Query.prototype.observe = function(eventType, options) {
+    options = Object.assign({
+      toString: true,
+      toJSON: true
+    }, options);
 
-    if (unpack && typeof unpack !== 'function') {
-      unpack = ss => ss.val();
+    if (options.unpack === true || options.unpack === undefined) {
+      options.unpack = snapshot => snapshot.val();
+    } else if (options.unpack === false) {
+      options.unpack = snapshot => snapshot;
     }
 
     return new Observable(observer => {
       const handler = (snapshot, prev) => observer.next(
-        unpackSnapShot(snapshot, prev, eventType, unpack)
+        unpackSnapShot(snapshot, prev, eventType, options)
       );
       const onError = err => observer.error(err);
 
@@ -98,17 +113,17 @@ exports.extend = function(firebase, Observable) {
    * @param  {boolean|function} unpack Should the snapshot be unpacked to their values?
    * @return {Observable}              Emit the sorted array of children each time one is updated.
    */
-  firebase.database.Query.prototype.observeChildren = function(unpack) {
+  firebase.database.Query.prototype.observeChildren = function(options) {
     // Each child event will be mapped to function to edit the sync-list.
     //
     // Insert a node
-    const addChild = this.observe('child_added', unpack).map(ss => list => list.push(ss));
+    const addChild = this.observe('child_added', options).map(ss => list => list.push(ss));
     // Replace a node with a new ss
-    const resetChild = this.observe('child_changed', unpack).map(ss => list => list.update(ss));
+    const resetChild = this.observe('child_changed', options).map(ss => list => list.update(ss));
     // Replace a node with a new ss at a different index
-    const moveChild = this.observe('child_moved', unpack).map(ss => list => list.move(ss));
+    const moveChild = this.observe('child_moved', options).map(ss => list => list.move(ss));
     // Remove a node
-    const removeChild = this.observe('child_removed', unpack).map(ss => list => list.remove(ss));
+    const removeChild = this.observe('child_removed', options).map(ss => list => list.remove(ss));
 
     return addChild.merge(resetChild).merge(moveChild).merge(removeChild).scan(
       (list, fn) => fn(list), syncList.create()
@@ -116,17 +131,41 @@ exports.extend = function(firebase, Observable) {
   };
 };
 
-function unpackSnapShot(snapShot, prev, eventType, unpack) {
-  let result = unpack ? unpack(snapShot) : snapShot;
+function unpackSnapShot(snapShot, prev, eventType, options) {
+  const val = options.unpack(snapShot);
 
-  if (!Object.isExtensible(result)) {
-    result = {$value: result};
-  }
-
-  return Object.defineProperties(result, {
+  return Object.defineProperties(wrapValue(val, options), {
     $prev: {value: prev},
     $eventType: {value: eventType},
     $key: {value: snapShot.key},
     $ref: {value: snapShot.ref}
   });
+}
+
+function wrapValue(val, options) {
+  if (Object.isExtensible(val)) {
+    return val;
+  }
+
+  const props = {};
+
+  if (options.toString) {
+    props.toString = {
+      value() {
+        return this.$value.toString();
+      },
+      writable: true
+    };
+  }
+
+  if (options.toJSON) {
+    props.toJSON = {
+      value() {
+        return this.$value;
+      },
+      writable: true
+    };
+  }
+
+  return Object.defineProperties({$value: val}, props);
 }
