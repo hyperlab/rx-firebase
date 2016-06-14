@@ -117,6 +117,8 @@ exports.extend = function(firebase, Observable) {
     // Each child event will be mapped to function to edit the sync-list.
     //
     // Insert a node
+    const seed = syncList.create();
+
     const addChild = this.observe('child_added', options).map(ss => list => list.push(ss));
     // Replace a node with a new ss
     const resetChild = this.observe('child_changed', options).map(ss => list => list.update(ss));
@@ -126,8 +128,8 @@ exports.extend = function(firebase, Observable) {
     const removeChild = this.observe('child_removed', options).map(ss => list => list.remove(ss));
 
     return addChild.merge(resetChild).merge(moveChild).merge(removeChild).scan(
-      (list, fn) => fn(list), syncList.create()
-    );
+      (list, fn) => fn(list), seed
+    ).startWith(seed);
   };
 };
 
