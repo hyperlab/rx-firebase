@@ -1,0 +1,19 @@
+{
+  "name": "rx-firebase",
+  "version": "0.0.0",
+  "description": "Extends Firebase websocket client with RxJS methods.",
+  "main": "rx-firebase.js",
+  "registry": "npm",
+  "peerDependencies": {
+    "firebase": "^3.0.0"
+  },
+  "jspmPackage": true,
+  "format": "amd",
+  "keywords": [
+    "Observable",
+    "RxJS",
+    "Firebase"
+  ],
+  "author": "Damien Lebrun",
+  "license": "MIT"
+}

@@ -1,10 +1,6 @@
 /* eslint max-nested-callbacks: off */
-'use strict';
-
-const chai = require('chai');
-const syncList = require('../src/sync-list');
-
-const expect = chai.expect;
+import {expect} from 'chai';
+import syncList from 'rx-firebase/sync-list.js';
 
 function ss($key, $prev, other) {
   return {$key, $prev, other};
@@ -14,7 +10,7 @@ describe('sync-list', function() {
   let list;
 
   beforeEach(function() {
-    list = syncList.create();
+    list = syncList();
   });
 
   describe('create', function() {

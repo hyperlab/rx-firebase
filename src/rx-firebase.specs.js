@@ -1,16 +1,13 @@
 /* eslint babel/object-shorthand: off */
-'use strict';
+import * as chai from 'chai';
+import sinon from 'sinon';
+import sinonChai from 'sinon-chai';
+import Rx from 'rxjs/bundles/Rx.umd.js';
 
-const chai = require('chai');
-const sinon = require('sinon');
-const sinonChai = require('sinon-chai');
-const rx = require('rxjs');
-
-const rxFirebase = require('../');
+import * as rxFirebase from 'rx-firebase';
+import 'rx-firebase/sync-list.specs.js';
 
 chai.use(sinonChai);
-
-require('./test-sync-list');
 
 const expect = chai.expect;
 
@@ -35,7 +32,7 @@ describe('extend', function() {
       off: sinon.spy()
     };
 
-    rxFirebase.extend(firebase, rx.Observable);
+    rxFirebase.extend(firebase, Rx.Observable);
   });
 
   it('should extend firebase auth', function() {
@@ -230,10 +227,10 @@ describe('extend', function() {
     let query, unpack, added, removed, moved, changed, close;
 
     beforeEach(function() {
-      added = new rx.Subject();
-      removed = new rx.Subject();
-      moved = new rx.Subject();
-      changed = new rx.Subject();
+      added = new Rx.Subject();
+      removed = new Rx.Subject();
+      moved = new Rx.Subject();
+      changed = new Rx.Subject();
 
       query = new firebase.database.Query();
       sinon.stub(query, 'observe');

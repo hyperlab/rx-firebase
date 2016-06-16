@@ -1,9 +1,7 @@
 /**
- * Firebase RxJS extensions.
+ * rx-firebase - Firebase RxJS extensions.
  */
-'use strict';
-
-const syncList = require('./sync-list');
+import syncList from 'rx-firebase/sync-list.js';
 
 /**
  * Extends firebase.auth.Auth and firebase.database.Query with methods returning
@@ -13,7 +11,7 @@ const syncList = require('./sync-list');
  * @param  {Observable} Observable A ES stage 1 Observable extended with the
  *                                 "map", "merge" and "scan" operator.
  */
-exports.extend = function(firebase, Observable) {
+export function extend(firebase, Observable) {
 
   /**
    * Create an observable emitting user status change.
@@ -117,7 +115,7 @@ exports.extend = function(firebase, Observable) {
     // Each child event will be mapped to function to edit the sync-list.
     //
     // Insert a node
-    const seed = syncList.create();
+    const seed = syncList();
 
     const addChild = this.observe('child_added', options).map(ss => list => list.push(ss));
     // Replace a node with a new ss
@@ -131,7 +129,7 @@ exports.extend = function(firebase, Observable) {
       (list, fn) => fn(list), seed
     ).startWith(seed);
   };
-};
+}
 
 function unpackSnapShot(snapShot, prev, eventType, options) {
   const val = options.unpack(snapShot);

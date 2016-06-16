@@ -1,4 +1,6 @@
-'use strict';
+/**
+ * rx-firebase/sync-list.js
+ */
 
 const meths = {
   findIndexByKey: {
@@ -77,13 +79,14 @@ const meths = {
 }, meths);
 
 /**
- * [create description]
- * @return {[type]} [description]
+ * Create a new sync list
+ *
+ * @return {array}
  */
-exports.create = function() {
+export default function create() {
   const arr = [];
 
   Object.defineProperties(arr, meths);
 
   return arr;
-};
+}

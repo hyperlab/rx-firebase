@@ -1,4 +1,10 @@
+_test/**
+coverage/**
+dist/**
+
+jspm_packages/**
+node_modules/**
+npm-debug.log
+
 *.sublime-project
 *.sublime-workspace
-node_modules/
-coverage/
