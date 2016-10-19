@@ -127,7 +127,7 @@ export function extend(firebase, Observable) {
 
     return addChild.merge(resetChild).merge(moveChild).merge(removeChild).scan(
       (list, fn) => fn(list), seed
-    ).startWith(seed);
+    );
   };
 }
 
